@@ -5,6 +5,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
+      - logstashdata:/usr/share/logstash/pipeline
     user: "0"
     command: >
       bash -c '
@@ -38,10 +39,34 @@ services:
         chown -R root:root config/certs;
         find . -type d -exec chmod 750 \{\} \;;
         find . -type f -exec chmod 640 \{\} \;;
+        echo "Generate pipeline.conf";
+        echo -ne \
+        "input {\n" \
+        "  beats {\n" \
+        "    port => '5044'\n" \
+        "  }\n" \
+        "}\n" \
+        "\n" \
+        "output {\n" \
+        "  elasticsearch {\n" \
+        "    hosts => 'es01:9200'\n" \
+        "    cacert => 'config/certs/ca/ca.crt'\n" \
+        "    user => 'logstash_system'\n" \
+        "    password => '${LOGSTASH_PASSWORD}'\n" \
+        "  }\n" \
+        "  stdout { codec => rubydebug }\n" \
+        "}\n" \
+        > pipeline/pipeline.conf;
+        echo "Setting file pipeline permissions";
+        chown -R root:root pipeline/;
+        find pipeline/ -type d -exec chmod 755 \{\} \;;
+        find pipeline/ -type f -exec chmod 644 \{\} \;;
         echo "Waiting for Elasticsearch availability";
         until curl -s --cacert config/certs/ca/ca.crt https://es01:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
         echo "Setting kibana_system password";
         until curl -s -X POST --cacert config/certs/ca/ca.crt -u elastic:${ELASTIC_PASSWORD} -H "Content-Type: application/json" https://es01:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
+        echo "Setting logstash_system password";
+        until curl -s -X POST --cacert config/certs/ca/ca.crt -u elastic:${ELASTIC_PASSWORD} -H "Content-Type: application/json" https://es01:9200/_security/user/logstash_system/_password -d "{\"password\":\"${LOGSTASH_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
         echo "All done!";
       '
     healthcheck:
@@ -124,10 +149,42 @@ services:
       timeout: 10s
       retries: 120
 
+  logstash:
+    depends_on:
+      es01:
+        condition: service_healthy
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    group_add:
+      - root
+    volumes:
+      - certs:/usr/share/logstash/config/certs
+      - logstashdata:/usr/share/logstash/pipeline
+    ports:
+      - ${LOGSTASH_BEATS_PORT}:5044
+    environment:
+      - PIPELINE_WORKERS=1
+      - xpack.monitoring.enabled=true
+      - xpack.monitoring.elasticsearch.username=logstash_system
+      - xpack.monitoring.elasticsearch.password=${LOGSTASH_PASSWORD}
+      - xpack.monitoring.elasticsearch.hosts=https://es01:9200
+      - xpack.monitoring.elasticsearch.ssl.certificate_authority=config/certs/ca/ca.crt
+    mem_limit: ${MEM_LIMIT}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5044 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
 volumes:
   certs:
     driver: local
   esdata01:
     driver: local
   kibanadata:
+    driver: local
+  logstashdata:
     driver: local
