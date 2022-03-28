@@ -39,28 +39,6 @@ services:
         chown -R root:root config/certs;
         find . -type d -exec chmod 750 \{\} \;;
         find . -type f -exec chmod 640 \{\} \;;
-        echo "Generate pipeline.conf";
-        echo -ne \
-        "input {\n" \
-        "  beats {\n" \
-        "    port => '5044'\n" \
-        "  }\n" \
-        "}\n" \
-        "\n" \
-        "output {\n" \
-        "  elasticsearch {\n" \
-        "    hosts => 'es01:9200'\n" \
-        "    cacert => 'config/certs/ca/ca.crt'\n" \
-        "    user => 'logstash_system'\n" \
-        "    password => '${LOGSTASH_PASSWORD}'\n" \
-        "  }\n" \
-        "  stdout { codec => rubydebug }\n" \
-        "}\n" \
-        > pipeline/pipeline.conf;
-        echo "Setting file pipeline permissions";
-        chown -R root:root pipeline/;
-        find pipeline/ -type d -exec chmod 755 \{\} \;;
-        find pipeline/ -type f -exec chmod 644 \{\} \;;
         echo "Waiting for Elasticsearch availability";
         until curl -s --cacert config/certs/ca/ca.crt https://es01:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
         echo "Setting kibana_system password";
@@ -158,7 +136,7 @@ services:
       - root
     volumes:
       - certs:/usr/share/logstash/config/certs
-      - logstashdata:/usr/share/logstash/pipeline
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     ports:
       - ${LOGSTASH_BEATS_PORT}:5044
     environment:
