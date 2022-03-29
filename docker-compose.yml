@@ -100,7 +100,7 @@ services:
       - certs:/usr/share/logstash/config/certs
       - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     ports:
-      - ${LOGSTASH_BEATS_PORT}:5044
+      - ${LOGSTASH_BEATS_PORT}:5043
     environment:
       - PIPELINE_WORKERS=1
       - xpack.monitoring.enabled=true
