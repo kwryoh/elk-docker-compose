@@ -5,10 +5,10 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
-      - logstashdata:/usr/share/logstash/pipeline
-      - ./setup.sh:/usr/share/logstash/setup.sh
+      - ./setup.sh:/tmp/setup.sh
+      - ./.env:/tmp/.env
     user: "0"
-    command: bash /usr/share/logstash/setup.sh
+    command: bash /tmp/setup.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f config/certs/${ES_NAME}/${ES_NAME}.crt ]"]
       interval: 1s

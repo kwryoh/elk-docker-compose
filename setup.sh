@@ -1,12 +1,15 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -euo pipefail
 
 #IFS=$'\n\t'
 
+SCRIPT_DIR=$(cd $(dirname $0); pwd)
+. ${SCRIPT_DIR}/.env
+
 # Check exist password value
 while read -r varname value; do
-  if [[ -z ${value}]]; then
+  if [[ -z ${value} ]]; then
     echo "Set the ${varname} environment variable in the .env file";
     exit 1;
   fi
@@ -19,14 +22,14 @@ REMOTE_MONITORING_PASSWORD ${REMOTE_MONITORING_PASSWORD}
 ___EOL___
 
 # Create CA certificates
-if [[ ! -f certs/ca.zip ]]; then
+if [[ ! -f config/certs/ca.zip ]]; then
   echo "Creating CA";
   bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
   unzip config/certs/ca.zip -d config/certs;
 fi;
 
 # Create elasticsearch certs
-if [[ ! -f certs/certs.zip ]]; then
+if [[ ! -f config/certs/certs.zip ]]; then
   echo "Creating certs";
   cat <<___EOL__ > config/certs/instances.yml;
 instances:
@@ -48,22 +51,11 @@ find . -type d -exec chmod 750 {} \;;
 find . -type f -exec chmod 640 {} \;;
 
 echo "Waiting for Elasticsearch availability";
-until curl -s --cacert config/certs/ca/ca.crt https://${ES_NAME}:9200 \
-  | grep -q "missing authentication credentials"; do sleep 30; done;
+until curl -s --cacert config/certs/ca/ca.crt https://${ES_NAME}:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
 
 while read -r username password; do
   echo "Setting ${username} password";
-  until \
-    curl -s \
-      -X POST \
-      --cacert config/certs/ca/ca.crt \
-      -u elastic:${ELASTIC_PASSWORD} \
-      -H "Content-Type: application/json" \
-      -d "{\"password\":\"${password}\"}" \
-      https://${ES_NAME}:9200/_security/user/${username}/_password \
-    | grep -q "^{}"; do
-      sleep 10;
-    done;
+  until curl -s -X POST --cacert config/certs/ca/ca.crt -u elastic:${ELASTIC_PASSWORD} -H "Content-Type: application/json" -d "{\"password\":\"${password}\"}" https://${ES_NAME}:9200/_security/user/${username}/_password | grep -q "^{}"; do sleep 10; done;
 done <<___EOL___
 kibana_system ${KIBANA_PASSWORD}
 logstash_system ${LOGSTASH_PASSWORD}
